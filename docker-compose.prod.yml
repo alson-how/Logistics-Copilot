@@ -61,10 +61,14 @@ services:
       VIRTUAL_PORT: 5173
       LETSENCRYPT_HOST: ${DOMAIN}
       LETSENCRYPT_EMAIL: ${SSL_EMAIL}
+      HOST: 0.0.0.0
     depends_on:
       - api
     expose:
       - "5173"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
     restart: unless-stopped
     networks:
       - internal
