@@ -1,0 +1,24 @@
+{
+  "name": "checklist-copilot-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "build": "tsc -p ."
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "js-yaml": "^4.1.0",
+    "node-html-parser": "^7.0.1",
+    "openai": "^4.55.0",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.4"
+  }
+}

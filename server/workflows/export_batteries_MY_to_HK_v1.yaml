@@ -1,0 +1,191 @@
+workflow_id: export_batteries_MY_to_HK_v1
+title: Export Batteries from Malaysia to Hong Kong
+version: 1.1
+steps:
+  - id: routing_basics
+    title: Basics
+    guidance_ref: ["iata_li_batt_summary"]
+    ask:
+      - id: transport_mode
+        label: Transport mode
+        type: single_select
+        options: [air, sea, courier]
+        required: true
+      - id: battery_configuration
+        label: Battery configuration
+        type: single_select
+        options:
+          - lithium_ion_cells_only
+          - lithium_ion_packed_with_equipment
+          - lithium_ion_contained_in_equipment
+          - lithium_metal_cells_only
+          - lithium_metal_packed_with_equipment
+          - lithium_metal_contained_in_equipment
+        required: true
+      - id: wh_or_li_content
+        label: Battery Type
+        type: single_select
+        options: [Watt-hour (Li-ion), lithium grams (Li-metal)]
+        required: true
+      - id: qty_per_pkg
+        label: Quantity per package
+        type: integer
+        required: true
+    next:
+      - when: always
+        goto: export_controls_screening
+
+  - id: export_controls_screening
+    title: Export controls screening (Malaysia)
+    guidance_ref: ["malaysia_epemit_overview","kc_malaysia_export_controls"]
+    ask:
+      - id: exporter_has_permit
+        label: Do you already have an export/strategic permit (if applicable)?
+        type: single_select
+        options: [yes, no]
+        required: true
+      - id: permit_number
+        label: Permit number (if yes)
+        type: string
+        required_if: exporter_has_permit==true
+        validate: "^[A-Za-z0-9-/]{5,}$"
+    actions_if:
+      - when: exporter_has_permit==false
+        advise:
+          - Apply for the relevant export/strategic permit via ePermit (DagangNet).
+    next:
+      - when: transport_mode==air
+        goto: air_dg_classification
+      - when: transport_mode==sea
+        goto: sea_dg_classification
+      - when: transport_mode==courier
+        goto: courier_dg_classification
+
+  - id: air_dg_classification
+    title: DG (Air) classification
+    guidance_ref: ["iata_li_batt_summary","kc_li_batteries_air_basics"]
+    ask:
+      - id: un_number
+        label: Confirm UN number
+        type: single_select
+        options: [UN3480, UN3481, UN3090, UN3091, unsure]
+        required: true
+      - id: pi_candidate
+        label: Candidate Packing Instruction (if known)
+        type: single_select
+        options: [PI965, PI966, PI967, PI968, PI969, PI970, unknown]
+        required: false
+    compute:
+      - output: dg_profile
+        from: battery_configuration + wh_or_li_content + qty_per_pkg + un_number + pi_candidate
+        using: ruleset_li_ion_air_v1
+    next:
+      - when: always
+        goto: air_marks_labels_docs
+
+  - id: air_marks_labels_docs
+    title: Marks, labels & docs (Air)
+    guidance_ref: ["kc_air_marks_labels_docs"]
+    guidance_query: "Air DG marks labels shipper declaration lithium battery PI965 PI966 PI967"
+    ask:
+      - id: has_msds
+        label: Do you have the latest SDS/MSDS for the battery?
+        type: boolean
+        required: true
+      - id: shipper_decl_needed
+        label: DG Shipper’s Declaration required?
+        type: boolean
+        derive_from: dg_profile.requires_shipper_decl
+      - id: overpack_used
+        label: Overpack used?
+        type: boolean
+        required: true
+    outputs:
+      - shipping_labels_list
+      - documentation_checklist
+    next:
+      - when: always
+        goto: hk_import_requirements
+
+  - id: hk_import_requirements
+    title: Hong Kong import requirements
+    guidance_ref: ["hk_air_cargo_handlers","kc_hk_batteries_import_basics"]
+    ask:
+      - id: hk_consignee_br
+        label: Hong Kong consignee BR/CR number
+        type: string
+        required: true
+      - id: hk_special_permit
+        label: Any required HK special permits/licenses already obtained?
+        type: boolean
+        required: true
+      - id: hk_special_permit_no
+        label: Permit/license number (if yes)
+        type: string
+        required_if: hk_special_permit==true
+    actions_if:
+      - when: hk_special_permit==false
+        advise:
+          - Coordinate with HK broker to confirm permit needs for your UN/PI configuration and consignee use-case.
+    next:
+      - when: always
+        goto: booking_and_handlers
+
+  - id: booking_and_handlers
+    title: Booking & handlers
+    ask:
+      - id: carrier
+        label: Airline/Carrier chosen
+        type: string
+        required: true
+      - id: acceptance_check
+        label: Carrier accepts this DG profile?
+        type: boolean
+        required: true
+    next:
+      - when: acceptance_check==false
+        goto: alternative_routing
+      - when: acceptance_check==true
+        goto: packlist_and_invoice
+
+  - id: alternative_routing
+    title: Alternative routing
+    ask:
+      - id: alt_routing_notes
+        label: Notes on alternative route/carrier
+        type: long_text
+        required: true
+    next:
+      - when: always
+        goto: packlist_and_invoice
+
+  - id: packlist_and_invoice
+    title: Commercial docs
+    ask:
+      - id: hs_code
+        label: HS code
+        type: string
+        required: true
+        validate: "^[0-9]{6,10}$"
+      - id: invoice_ready
+        label: Commercial invoice prepared?
+        type: boolean
+        required: true
+      - id: packing_list_ready
+        label: Packing list prepared?
+        type: boolean
+        required: true
+    outputs:
+      - final_shipping_checklist
+      - audit_trail_json
+    next:
+      - when: always
+        goto: done
+
+  - id: done
+    title: Done
+    ask: []
+    outputs:
+      - booking_summary_pdf
+      - labels_zip
+      - compliance_report_pdf
