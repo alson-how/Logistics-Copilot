@@ -1,0 +1,114 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    expose:
+      - "5432"  # Only expose internally
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./db/init.d:/docker-entrypoint-initdb.d:ro
+      - ./db/seed:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - internal
+
+  api:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAG_TOP_K: 6
+      AUTO_INGEST: "1"
+      KNOWLEDGE_DIR: "/knowledge"
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+    volumes:
+      - ./server/workflows:/app/workflows:ro
+      - ./db/seed:/seed:ro
+      - type: bind
+        source: ./knowledge
+        target: /knowledge
+        bind:
+          create_host_path: true
+    restart: unless-stopped
+    networks:
+      - internal
+
+  web:
+    build: 
+      context: ./client
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE: /api
+      VIRTUAL_HOST: ${DOMAIN}
+      VIRTUAL_PORT: 5173
+      LETSENCRYPT_HOST: ${DOMAIN}
+      LETSENCRYPT_EMAIL: ${SSL_EMAIL}
+    depends_on:
+      - api
+    expose:
+      - "5173"
+    restart: unless-stopped
+    networks:
+      - internal
+      - nginx-proxy
+
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - nginx-certs:/etc/nginx/certs
+      - nginx-vhost:/etc/nginx/vhost.d
+      - nginx-html:/usr/share/nginx/html
+    restart: unless-stopped
+    networks:
+      - nginx-proxy
+
+  acme-companion:
+    image: nginxproxy/acme-companion
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nginx-certs:/etc/nginx/certs
+      - nginx-vhost:/etc/nginx/vhost.d
+      - nginx-html:/usr/share/nginx/html
+      - acme:/etc/acme.sh
+    environment:
+      - DEFAULT_EMAIL=${SSL_EMAIL}
+    depends_on:
+      - nginx-proxy
+    restart: unless-stopped
+    networks:
+      - nginx-proxy
+
+volumes:
+  dbdata:
+  nginx-certs:
+  nginx-vhost:
+  nginx-html:
+  acme:
+
+networks:
+  internal:
+    internal: true
+  nginx-proxy:
+    external: false
