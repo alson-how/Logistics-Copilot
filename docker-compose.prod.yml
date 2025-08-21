@@ -56,54 +56,52 @@ services:
       context: ./client
       dockerfile: Dockerfile
     environment:
-      VITE_API_BASE: /api
       VIRTUAL_HOST: ${DOMAIN}
       VIRTUAL_PORT: 5173
       LETSENCRYPT_HOST: ${DOMAIN}
       LETSENCRYPT_EMAIL: ${SSL_EMAIL}
-      HOST: 0.0.0.0
     depends_on:
       - api
     expose:
       - "5173"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
     restart: unless-stopped
     networks:
       - internal
       - nginx-proxy
 
   nginx-proxy:
-    container_name: nginx-proxy  # Added explicit container name
-    image: nginxproxy/nginx-proxy
-    labels:
-      - "com.github.nginx-proxy.nginx"  # Added label for acme-companion
+    image: nginxproxy/nginx-proxy:alpine
+    container_name: nginx-proxy
     ports:
       - "80:80"
       - "443:443"
     volumes:
+      - conf:/etc/nginx/conf.d
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - certs:/etc/nginx/certs:ro
       - /var/run/docker.sock:/tmp/docker.sock:ro
-      - nginx-certs:/etc/nginx/certs
-      - nginx-vhost:/etc/nginx/vhost.d
-      - nginx-html:/usr/share/nginx/html
+    environment:
+      - ENABLE_IPV6=true
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy"
     restart: unless-stopped
     networks:
       - nginx-proxy
 
   acme-companion:
     image: nginxproxy/acme-companion
+    container_name: nginx-proxy-acme
+    volumes:
+      - conf:/etc/nginx/conf.d
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - certs:/etc/nginx/certs:rw
+      - acme:/etc/acme.sh
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - DEFAULT_EMAIL=${SSL_EMAIL}
-      - NGINX_PROXY_CONTAINER=nginx-proxy  # Added reference to nginx-proxy container
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - nginx-certs:/etc/nginx/certs
-      - nginx-vhost:/etc/nginx/vhost.d
-      - nginx-html:/usr/share/nginx/html
-      - acme:/etc/acme.sh
-    volumes_from:
-      - nginx-proxy:rw  # Added volumes_from directive
+      - NGINX_PROXY_CONTAINER=nginx-proxy
     depends_on:
       - nginx-proxy
     restart: unless-stopped
@@ -112,13 +110,15 @@ services:
 
 volumes:
   dbdata:
-  nginx-certs:
-  nginx-vhost:
-  nginx-html:
+  conf:
+  vhost:
+  html:
+  certs:
   acme:
 
 networks:
   internal:
     internal: true
   nginx-proxy:
+    name: nginx-proxy
     external: false
