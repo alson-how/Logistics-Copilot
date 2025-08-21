@@ -60,6 +60,7 @@ services:
       VIRTUAL_PORT: 5173
       LETSENCRYPT_HOST: ${DOMAIN}
       LETSENCRYPT_EMAIL: ${SSL_EMAIL}
+      LETSENCRYPT_TEST: "true"  # Added for testing
     depends_on:
       - api
     expose:
@@ -70,35 +71,38 @@ services:
       - nginx-proxy
 
   nginx-proxy:
-    image: jwilder/nginx-proxy:alpine
+    image: nginxproxy/nginx-proxy:latest
     container_name: nginx-proxy
-    labels:
-      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy"
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
-      - certs:/etc/nginx/certs
+      - certs:/etc/nginx/certs:ro
       - vhost.d:/etc/nginx/vhost.d
       - html:/usr/share/nginx/html
+    environment:
+      - DHPARAM_GENERATION=false
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy"
     restart: unless-stopped
     networks:
       - nginx-proxy
 
   acme-companion:
-    image: nginxproxy/acme-companion:2.2
+    image: nginxproxy/acme-companion:latest
     container_name: nginx-proxy-acme
-    volumes_from:
-      - nginx-proxy
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - acme:/etc/acme.sh
-      - certs:/etc/nginx/certs:rw
     environment:
       - DEFAULT_EMAIL=${SSL_EMAIL}
       - NGINX_PROXY_CONTAINER=nginx-proxy
       - DEBUG=true
+      - ACME_CA_URI=https://acme-staging-v02.api.letsencrypt.org/directory  # Use staging for testing
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - certs:/etc/nginx/certs:rw
+      - vhost.d:/etc/nginx/vhost.d:rw
+      - html:/usr/share/nginx/html:rw
+      - acme:/etc/acme.sh
     depends_on:
       - nginx-proxy
     restart: unless-stopped
@@ -108,8 +112,8 @@ services:
 volumes:
   dbdata:
   certs:
-  html:
   vhost.d:
+  html:
   acme:
 
 networks:
