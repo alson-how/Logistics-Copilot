@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     expose:
-      - "5432"  # Only expose internally
+      - "5432"
     volumes:
       - dbdata:/var/lib/postgresql/data
       - ./db/init.d:/docker-entrypoint-initdb.d:ro
@@ -71,7 +71,10 @@ services:
       - nginx-proxy
 
   nginx-proxy:
+    container_name: nginx-proxy  # Added explicit container name
     image: nginxproxy/nginx-proxy
+    labels:
+      - "com.github.nginx-proxy.nginx"  # Added label for acme-companion
     ports:
       - "80:80"
       - "443:443"
@@ -86,14 +89,17 @@ services:
 
   acme-companion:
     image: nginxproxy/acme-companion
+    environment:
+      - DEFAULT_EMAIL=${SSL_EMAIL}
+      - NGINX_PROXY_CONTAINER=nginx-proxy  # Added reference to nginx-proxy container
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - nginx-certs:/etc/nginx/certs
       - nginx-vhost:/etc/nginx/vhost.d
       - nginx-html:/usr/share/nginx/html
       - acme:/etc/acme.sh
-    environment:
-      - DEFAULT_EMAIL=${SSL_EMAIL}
+    volumes_from:
+      - nginx-proxy:rw  # Added volumes_from directive
     depends_on:
       - nginx-proxy
     restart: unless-stopped
