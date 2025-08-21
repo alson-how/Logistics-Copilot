@@ -70,38 +70,35 @@ services:
       - nginx-proxy
 
   nginx-proxy:
-    image: nginxproxy/nginx-proxy:alpine
+    image: jwilder/nginx-proxy:alpine
     container_name: nginx-proxy
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - conf:/etc/nginx/conf.d
-      - vhost:/etc/nginx/vhost.d
-      - html:/usr/share/nginx/html
-      - certs:/etc/nginx/certs:ro
       - /var/run/docker.sock:/tmp/docker.sock:ro
-    environment:
-      - ENABLE_IPV6=true
-    labels:
-      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy"
+      - certs:/etc/nginx/certs
+      - vhost.d:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
     restart: unless-stopped
     networks:
       - nginx-proxy
 
   acme-companion:
-    image: nginxproxy/acme-companion
+    image: nginxproxy/acme-companion:2.2
     container_name: nginx-proxy-acme
+    volumes_from:
+      - nginx-proxy
     volumes:
-      - conf:/etc/nginx/conf.d
-      - vhost:/etc/nginx/vhost.d
-      - html:/usr/share/nginx/html
-      - certs:/etc/nginx/certs:rw
-      - acme:/etc/acme.sh
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme:/etc/acme.sh
+      - certs:/etc/nginx/certs:rw
     environment:
       - DEFAULT_EMAIL=${SSL_EMAIL}
       - NGINX_PROXY_CONTAINER=nginx-proxy
+      - DEBUG=true
     depends_on:
       - nginx-proxy
     restart: unless-stopped
@@ -110,10 +107,9 @@ services:
 
 volumes:
   dbdata:
-  conf:
-  vhost:
-  html:
   certs:
+  html:
+  vhost.d:
   acme:
 
 networks:
