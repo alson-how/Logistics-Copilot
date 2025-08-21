@@ -224,9 +224,9 @@ function WorkflowInput({ question, onSubmit, loading }: {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {renderInput()}
-    </div>
+    </form>
   );
 }
 
