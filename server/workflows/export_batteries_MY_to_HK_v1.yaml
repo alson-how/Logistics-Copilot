@@ -52,7 +52,7 @@ steps:
     actions_if:
       - when: exporter_has_permit==false
         advise:
-          - Apply for the relevant export/strategic permit via ePermit (DagangNet).
+          - Apply for the relevant export/strategic permit via ePermit (DagangNet) for batteries.
     next:
       - when: transport_mode==air
         goto: air_dg_classification

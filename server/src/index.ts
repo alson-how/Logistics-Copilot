@@ -1,20 +1,16 @@
 import express from 'express';
 import cors from 'cors';
-import { PORT } from './env.js';
-import { health } from './routes/health.js';
-import { rag } from './routes/rag.js';
-import { workflowRouter } from './routes/workflow.js';
 import { chat } from './routes/chat.js';
 import { ingestDir } from './knowledge.js';
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+const PORT = process.env.PORT || 8080;
 
-app.use('/api', health);
-app.use('/api', rag);
-app.use('/api', workflowRouter);
-app.use('/api', chat);
+app.use(cors());
+app.use(express.json());
+
+// Mount chat route at /chat
+app.use('/chat', chat);
 
 app.listen(PORT, async () => {
   console.log(`API on :${PORT}`);

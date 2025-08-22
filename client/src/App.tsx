@@ -5,6 +5,7 @@ const API = (import.meta as any).env.VITE_API_BASE || 'http://localhost:8080';
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  citations?: Array<{ title: string; content: string; url?: string }>;
 }
 
 interface WorkflowUI {
@@ -49,7 +50,7 @@ interface WorkflowState {
 interface ChatResponse {
   ok: boolean;
   response: string;
-  context: Array<{ title: string; content: string }>;
+  context?: Array<{ title: string; content: string; url?: string }>;
   workflow?: WorkflowState;
   error?: string;
 }
@@ -234,7 +235,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [context, setContext] = useState<Array<{ title: string; content: string }>>([]);
+  const [context, setContext] = useState<Array<{ title: string; content: string; url?: string }>>([]);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
 
   async function exitWorkflow() {
@@ -254,10 +255,8 @@ export default function App() {
     setLoading(true);
     setInput('');
 
-
-    
     try {
-      const res = await fetch(`${API}/api/chat`, {
+      const res = await fetch(`${API}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: messages.concat(userMsg) })
@@ -265,12 +264,21 @@ export default function App() {
       const data: ChatResponse = await res.json();
       
       if (data.ok) {
-        setContext(data.context);
+        // Update context if available
+        if (data.context) {
+          setContext(data.context);
+        }
+
+        // Update workflow state if available
         setWorkflow(data.workflow || null);
         
-        // Add the response message
+        // Add the response message with citations
         if (data.response) {
-          setMessages(msgs => [...msgs, { role: 'assistant', content: data.response }]);
+          setMessages(msgs => [...msgs, { 
+            role: 'assistant', 
+            content: data.response,
+            citations: data.context
+          }]);
         }
         
         // Add the workflow summary if available
@@ -288,13 +296,65 @@ export default function App() {
         }]);
       }
     } catch (e) {
+      console.error('Failed to send message:', e);
       setMessages(msgs => [...msgs, { 
         role: 'assistant', 
         content: 'Error: Could not get response.' 
       }]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
+
+  function renderMessage(msg: Message, index: number) {
+    const isUser = msg.role === 'user';
+    return (
+      <div key={index} style={{ margin: '12px 0', textAlign: isUser ? 'right' : 'left' }}>
+        <div style={{ 
+          display: 'inline-block', 
+          padding: '8px 12px', 
+          borderRadius: 8, 
+          background: isUser ? '#dbeafe' : '#e5e7eb', 
+          color: '#222', 
+          maxWidth: '80%'
+        }}>
+          {/* Message content */}
+          <div style={{ whiteSpace: 'pre-wrap' }}>
+            {msg.content}
+          </div>
+
+          {/* Citations */}
+          {!isUser && msg.citations && msg.citations.length > 0 && (
+            <div style={{ 
+              marginTop: 8, 
+              paddingTop: 8, 
+              borderTop: '1px solid rgba(0,0,0,0.1)', 
+              fontSize: '0.9em' 
+            }}>
+              <div style={{ fontWeight: 500, marginBottom: 4 }}>Sources:</div>
+              {msg.citations.map((citation, i) => (
+                <div key={i} style={{ marginBottom: 4 }}>
+                  {citation.url ? (
+                    <a 
+                      href={citation.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ color: '#2563eb', textDecoration: 'none' }}
+                    >
+                      {citation.title}
+                    </a>
+                  ) : (
+                    <span>{citation.title}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 1200, margin: '40px auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif' }}>
       <h1>Checklist Copilot AI Chat</h1>
@@ -304,13 +364,7 @@ export default function App() {
           <div style={{ flex: 1, border: '1px solid #ddd', borderRadius: 8, padding: 16, minHeight: 300, background: '#fafbfc', marginBottom: 16, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {messages.length === 0 && <div style={{ opacity: 0.6 }}>Type "help" to see available commands, or ask a question about batteries, export, or regulations…</div>}
-              {messages.map((msg, i) => (
-                <div key={i} style={{ margin: '12px 0', textAlign: msg.role === 'user' ? 'right' : 'left' }}>
-                  <div style={{ display: 'inline-block', padding: '8px 12px', borderRadius: 8, background: msg.role === 'user' ? '#dbeafe' : '#e5e7eb', color: '#222', maxWidth: '80%', whiteSpace: 'pre-wrap' }}>
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
+              {messages.map((msg, i) => renderMessage(msg, i))}
               {loading && <div style={{ margin: '12px 0', color: '#888' }}>Thinking…</div>}
             </div>
             
@@ -323,7 +377,6 @@ export default function App() {
                 borderRadius: 8, 
                 border: '1px solid #e5e7eb'
               }}>
-
                 <WorkflowInput
                   question={{
                     id: 'current_question',
@@ -474,7 +527,20 @@ export default function App() {
               <h3 style={{ margin: '0 0 12px 0' }}>Reference Documents</h3>
               {context.map((doc, i) => (
                 <div key={i} style={{ marginBottom: 12 }}>
-                  <div style={{ fontWeight: 500 }}>{doc.title}</div>
+                  <div style={{ fontWeight: 500 }}>
+                    {doc.url ? (
+                      <a 
+                        href={doc.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ color: '#2563eb', textDecoration: 'none' }}
+                      >
+                        {doc.title}
+                      </a>
+                    ) : (
+                      doc.title
+                    )}
+                  </div>
                   <div style={{ color: '#666', fontSize: '0.9em' }}>{doc.content.substring(0, 200)}...</div>
                 </div>
               ))}
@@ -485,4 +551,3 @@ export default function App() {
     </div>
   );
 }
-
