@@ -35,6 +35,10 @@ services:
       RAG_TOP_K: 6
       AUTO_INGEST: "1"
       KNOWLEDGE_DIR: "/knowledge"
+      VIRTUAL_HOST: chatlah.tech
+      VIRTUAL_PATH: /api
+      LETSENCRYPT_HOST: chatlah.tech
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
     depends_on:
       db:
         condition: service_healthy
