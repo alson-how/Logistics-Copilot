@@ -3,6 +3,9 @@ WORKDIR /app
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 RUN npm ci || yarn install --frozen-lockfile || true
 COPY . .
+# Accept build argument and set as environment variable for Vite
+ARG VITE_API_BASE
+ENV VITE_API_BASE=$VITE_API_BASE
 RUN npm run build
 
 FROM node:20-alpine
