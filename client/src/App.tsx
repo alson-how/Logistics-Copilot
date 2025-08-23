@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 
 const API = (import.meta as any).env.VITE_API_BASE || 'http://localhost:8080';
+console.log('API URL:', API, 'VITE_API_BASE:', (import.meta as any).env.VITE_API_BASE);
 
 interface Message {
   role: 'user' | 'assistant' | 'system';

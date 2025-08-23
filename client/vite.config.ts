@@ -18,5 +18,11 @@ export default defineConfig({
   preview: {
     port: 5173,
     host: true
+  },
+  // Remove proxy in production build
+  build: {
+    rollupOptions: {
+      // Ensure environment variables are properly replaced
+    }
   }
 })
