@@ -5,6 +5,7 @@ import { retrieve, ingestDocument } from '../rag.js';
 import { loadWorkflow, advanceAsync, getGuidanceHelp } from '../workflow.js';
 import { State, WorkflowState, WorkflowMatch } from '../types.js';
 import path from 'path';
+import { isShippingAgentQuery, extractProductFromQuery, findShippingAgents } from '../shipping_agent_suggestion.js';
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 const WF_PATH = path.join(process.cwd(), 'workflows', 'export_batteries_MY_to_HK_v1.yaml');
@@ -12,24 +13,12 @@ const workflow = loadWorkflow(WF_PATH);
 
 export const chat = Router();
 
-const SYSTEM_PROMPT = `You are an AI copilot specializing in import/export regulations and compliance workflows.
+const SYSTEM_PROMPT = `You are an AI copilot specializing in import/export regulations and compliance workflows in Malaysia.
 Your responses should be:
 1. Accurate and based on the provided context
 2. Clear and concise
 3. Professional in tone
 4. Focused on answering the specific question asked
-
-When users ask about exporting or importing goods:
-1. If a matching workflow is available, guide them through it
-2. Explain each step's requirements and regulations
-3. Provide relevant context from the knowledge base
-4. Be proactive in suggesting next steps
-
-For example, if a user asks "How do I export batteries from Malaysia to Hong Kong?", respond with:
-1. Acknowledge their goal
-2. Start the relevant workflow
-3. Explain the first step
-4. Provide relevant regulations or requirements
 
 When you don't have enough information in the context to fully answer a question, acknowledge this and explain what you can based on the available information.
 If the information comes from web search, start your response with "Based on web search results (please verify with official sources):"`;
@@ -37,7 +26,7 @@ If the information comes from web search, start your response with "Based on web
 let currentWorkflow: WorkflowState | null = null;
 
 // Minimum relevance score for RAG results (0 to 1)
-const MIN_RELEVANCE_SCORE = 0.82;
+const MIN_RELEVANCE_SCORE = 0.55;
 
 async function searchWeb(query: string) {
     try {
@@ -120,9 +109,9 @@ function matchWorkflow(text: string): WorkflowMatch | null {
 
       if (!bestMatch || confidence > bestMatch.confidence) {
         bestMatch = {
-          workflow: workflowId,
+          id: workflowId,
           confidence: confidence,
-          triggers: matchedTriggers
+          matches: matchedTriggers.map(term => ({ term, category: 'trigger' }))
         };
       }
     }
@@ -155,8 +144,14 @@ function isCommand(text: string): string | null {
   
   const normalizedText = text.toLowerCase().trim();
   
+  // Exact match for help
+  if (normalizedText === 'help') {
+    return 'help';
+  }
+  
+  // Check for other commands as exact phrases
   for (const [cmd, action] of Object.entries(commands)) {
-    if (normalizedText.includes(cmd)) {
+    if (cmd !== 'help' && normalizedText.includes(cmd)) {
       return action;
     }
   }
@@ -206,7 +201,7 @@ async function handleWorkflowCommand(command: string, value?: any, userMessage?:
         const currentQuestion = currentStep?.ask?.find(q => q.label === currentWorkflow.ui.question);
         
         // Check if this is the permit question and answer is no
-        if (value === false || value === 'no') {
+        if (currentQuestion?.id === 'exporter_has_permit' && (value === false || value === 'no')) {
           // Get the advice from the workflow for this case
           const advice = currentStep?.actions_if?.find(action => 
             action.when === 'exporter_has_permit==false'
@@ -296,9 +291,8 @@ async function handleWorkflowCommand(command: string, value?: any, userMessage?:
   }
 }
 
-// Add the POST route handler
 chat.post('/', async (req, res) => {
-    const { messages } = req.body;
+    const { messages, workflowValue } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ ok: false, error: 'Invalid messages array' });
     }
@@ -308,7 +302,46 @@ chat.post('/', async (req, res) => {
         return res.status(400).json({ ok: false, error: 'Invalid user message' });
     }
 
+    // If we have a workflow value, use it to continue the workflow
+    if (workflowValue !== undefined && currentWorkflow) {
+        // For integer inputs, parse the value
+        let finalValue = workflowValue;
+        if (currentWorkflow.ui.question?.includes('Quantity')) {
+            const num = parseInt(workflowValue, 10);
+            if (!isNaN(num)) {
+                finalValue = num.toString();
+            }
+        }
+        const { response, workflow: updatedWorkflow, context } = await handleWorkflowCommand('continue', finalValue);
+        return res.json({ 
+            ok: true, 
+            response,
+            workflow: updatedWorkflow,
+            context: context || []
+        });
+    }
+
     try {
+        // Check if this is a shipping agent query
+        if (isShippingAgentQuery(userMessage.content)) {
+            const product = extractProductFromQuery(messages);
+            
+            if (!product) {
+                return res.json({
+                    ok: true,
+                    response: "What type of goods are you looking to export? This will help me find the most suitable shipping agents for your needs.",
+                    context: []
+                });
+            }
+
+            const response = await findShippingAgents(product, messages);
+            return res.json({
+                ok: true,
+                response,
+                context: []
+            });
+        }
+
         // Check for workflow commands or intent
         const command = isCommand(userMessage.content);
         if (command) {
@@ -366,28 +399,27 @@ chat.post('/', async (req, res) => {
         let sources = [];
         let isWebSearch = false;
 
-        const hasRelevantRagResults = ragResults.length > 0 && 
-            ragResults.some(r => {
-                if (r.uri?.startsWith('web://')) return false;
-                const score = r.score || 0;
-                console.log(`RAG result score for ${r.title}: ${score}`);
-                return score >= MIN_RELEVANCE_SCORE;
-            });
+        // Filter out web results and check scores
+        const relevantRagResults = ragResults.filter(r => {
+            // Skip web results
+            if (r.uri?.startsWith('web://')) return false;
+            const score = r.score || 0;
+            console.log(`RAG result score for ${r.title}: ${score}`);
+            return score >= MIN_RELEVANCE_SCORE;
+        });
+        
+        const hasRelevantRagResults = relevantRagResults.length > 0;
+        console.log(`Found ${relevantRagResults.length} relevant RAG results with scores >= ${MIN_RELEVANCE_SCORE}`);
 
         if (hasRelevantRagResults) {
             console.log('Using RAG results...');
-            contextText = ragResults.map(r => {
-                const isWeb = r.uri?.startsWith('web://');
-                const sourceInfo = isWeb ? 
-                    `Source: [${r.title}](${r.uri.slice(6)})` : 
-                    `Source: ${r.title}`;
-                return `\n${sourceInfo}\nContent: ${r.content}\n---`;
+            // For RAG results, only include content in context, not sources
+            contextText = relevantRagResults.map(r => {
+                return `\nContent from ${r.title}:\n${r.content}\n---`;
             }).join('\n');
-            sources = ragResults.map(r => ({ 
-                title: r.title, 
-                content: r.content,
-                url: r.uri?.startsWith('web://') ? r.uri.slice(6) : undefined
-            }));
+            // For RAG results, don't show sources in the UI
+            sources = [];
+            isWebSearch = false;
         } else {
             console.log('No relevant RAG results found, falling back to web search...');
             const webResults = await searchWeb(userMessage.content);
@@ -411,7 +443,7 @@ chat.post('/', async (req, res) => {
 
         const sourceNote = isWebSearch ? 
             "\nNote: This information comes from web search results. Please verify the information from official sources." :
-            "\nNote: This information comes from our knowledge base.";
+            "";
 
         const chatMessages = [
             { role: 'system', content: SYSTEM_PROMPT },
@@ -431,7 +463,8 @@ chat.post('/', async (req, res) => {
             ok: true, 
             response,
             workflow: currentWorkflow,
-            context: sources
+            context: sources,
+            isWebSearch
         });
 
     } catch (error: any) {

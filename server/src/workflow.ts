@@ -62,7 +62,8 @@ function validate(value: any, q: Q): string | null {
 
 function applyComputations(step: Step, state: State) {
   for (const c of step.compute || []) {
-    if (c.using === 'ruleset_li_ion_air_v1') {
+    const usingValue = Array.isArray(c.using) ? c.using[0] : c.using;
+    if (usingValue === 'ruleset_li_ion_air_v1') {
       state.computed[c.output] = rules_air.classify({
         battery_configuration: String(state.answers['battery_configuration'] || ''),
         wh_or_li_content: String(state.answers['wh_or_li_content'] || ''),

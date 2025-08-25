@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "echo 'Skipping build'",
+    "build": "tsc",
     "start": "tsx src/index.ts",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test:extraction": "tsx src/test/extraction_test.ts"
   },
   "dependencies": {
     "@types/express": "^4.17.21",

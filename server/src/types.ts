@@ -90,3 +90,12 @@ export interface WorkflowResult {
     message?: string;
     summary?: WorkflowSummary;
 }
+
+export interface WorkflowMatch {
+    id: string;
+    confidence: number;
+    matches: {
+        term: string;
+        category: string;
+    }[];
+}

@@ -1,0 +1,76 @@
+{
+    "version": "1.0.0",
+    "intents": [
+      "FIND_AGENT",
+      "GET_RATE",
+      "TRACK",
+      "POLICY_HELP",
+      "CREATE_SHIPMENT",
+      "ESCALATE_TICKET"
+    ],
+    "categories": {
+      "food_agriculture": {
+        "synonyms": ["food", "agri", "agriculture", "fresh", "produce", "halal", "冷链", "食品农业"],
+        "specializations": {
+          "birds_nest_export": {
+            "synonyms": ["bird's nest", "birds nest", "birdnest", "edible bird’s nest", "edible birds nest", "EBN", "燕窝"],
+            "requires_regulatory_help": true
+          },
+          "seafood_export": {
+            "synonyms": ["seafood", "frozen fish", "prawn", "shrimp", "冷冻海鲜"]
+          },
+          "cold_chain": {
+            "synonyms": ["cold chain", "chilled", "frozen", "temperature controlled", "冷链"]
+          },
+          "halal_cert": {
+            "synonyms": ["halal", "jakim", "穆斯林清真"]
+          }
+        }
+      },
+      "dg_cargo": {
+        "synonyms": ["DG", "hazmat", "dangerous goods", "chemicals", "flammable", "UN number", "危險品", "危险品"],
+        "specializations": {
+          "chemical_dg": {
+            "synonyms": ["chemical", "solvent", "acid", "base", "化学品"]
+          },
+          "battery_lithium": {
+            "synonyms": ["lithium battery", "UN3480", "UN3481", "锂电池"]
+          }
+        }
+      },
+      "ecommerce_fulfillment": {
+        "synonyms": ["ecommerce", "fulfillment", "pick and pack", "last mile", "parcel", "电商"],
+        "specializations": {
+          "cross_border_ec": {
+            "synonyms": ["cross-border", "cbec", "lazada", "shopee", "tiktok shop"]
+          }
+        }
+      },
+      "general_freight": {
+        "synonyms": ["freight forwarder", "air freight", "sea freight", "container", "FCL", "LCL", "空运", "海运"],
+        "specializations": {
+          "project_cargo": {
+            "synonyms": ["project cargo", "oversized", "out-of-gauge", "OOG"]
+          }
+        }
+      },
+      "regional_specialist": {
+        "synonyms": ["china", "asean", "singapore", "thailand", "vietnam", "europe", "japan", "regional"],
+        "specializations": {
+          "china_trade": {
+            "synonyms": ["china", "cn", "PRC", "中国"]
+          },
+          "asean_cross_border": {
+            "synonyms": ["asean", "singapore", "thailand", "vietnam", "my-sg", "sg-my"]
+          }
+        }
+      }
+    },
+    "languages_supported": ["en", "ms", "zh"],
+    "normalization": {
+      "strip_punctuation": true,
+      "lowercase": true,
+      "diacritics": "remove"
+    }
+  }
+  

@@ -27,10 +27,6 @@ steps:
         type: single_select
         options: [Watt-hour (Li-ion), lithium grams (Li-metal)]
         required: true
-      - id: qty_per_pkg
-        label: Quantity per package
-        type: integer
-        required: true
     next:
       - when: always
         goto: export_controls_screening
